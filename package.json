@@ -1,0 +1,33 @@
+{
+  "name": "teampulse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server/app.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "start": "node server/app.js",
+    "test": "node --test --test-concurrency=1",
+    "db:init": "node db/manage.cjs init",
+    "db:migrate": "node db/manage.cjs migrate",
+    "db:seed:demo": "node db/manage.cjs seed-demo",
+    "db:finalize-weeks": "node db/finalize-weeks.cjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-session": "^1.19.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.2"
+  }
+}

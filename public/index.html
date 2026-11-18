@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="description" content="TeamPulse — a private space to check in, reflect, and find support at work.">
+    <!-- Check-ins/history use PostgreSQL; unrelated support features remain demo. -->
+    <meta name="teampulse-data-source" content="postgres">
+    <title>Demo Access · TeamPulse</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/teampulse-logo.svg#mark">
+    <link rel="preload" href="/assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/css/style.css">
+    <script type="module" src="/js/app.mjs"></script>
+</head>
+
+<body class="auth-mode">
+    <a class="skip-link" href="#prototype-content">Skip to content</a>
+    <section id="prototype-access" class="access-page" aria-label="TeamPulse MVP demo access">
+        <div class="access-layout" id="prototype-content" tabindex="-1">
+            <div class="access-introduction">
+                <div class="access-brand"><img class="brand-mark" src="/assets/teampulse-logo.svg#mark" width="140" height="136" alt="TeamPulse people-circle logo"><strong>TeamPulse</strong><em>Listen. Understand. Support.</em></div>
+                <p class="eyebrow">A SAFER WAY TO LISTEN TO YOUR TEAM</p>
+                <h1>A space to be heard,<br><span>without being<br class="headline-break"> watched.</span></h1>
+                <p class="access-description">TeamPulse helps people share how work feels and helps organizations respond with care—without exposing individual wellbeing responses.</p>
+                <div class="access-principle"><span data-icon="lock"></span><div><strong>Identity and responses stay separate</strong><p>Your account confirms eligibility. Check-ins use a random response identifier.</p></div></div>
+                <div class="access-principle"><span data-icon="people"></span><div><strong>Only aggregated insights are shared</strong><p>Managers and HR never see names, individual answers, or personal wellbeing scores.</p></div></div>
+                <p class="access-assurance"><span data-icon="shield"></span>TeamPulse supports teams. It does not monitor individuals.</p>
+            </div>
+            <div class="access-form-column">
+                <form id="prototype-form" class="access-card">
+                    <div class="access-card-heading"><span class="access-symbol" data-icon="building"></span><div><p class="eyebrow">TEAMPULSE MVP</p><h2>Demo access</h2></div></div>
+                    <p class="access-caption">Explore the MVP using an existing fictional account.</p>
+                    <fieldset class="role-picker"><legend>Choose a demo account</legend><p>Each account opens its own role and permissions.</p><div class="role-options">
+                        <label><input type="radio" name="role" value="employee" checked required><span><span data-icon="heart"></span><strong>Employee</strong><small>Beatriz Sousa</small><small>Platform</small></span></label>
+                        <label><input type="radio" name="role" value="manager"><span><span data-icon="people"></span><strong>Manager</strong><small>Mara Duarte</small><small>Platform</small></span></label>
+                        <label><input type="radio" name="role" value="hr"><span><span data-icon="building"></span><strong>HR</strong><small>Marta Pinto</small><small>Organization</small></span></label>
+                    </div></fieldset>
+                    <button class="button provider-button" type="submit" disabled>Enter demo<span data-icon="arrow"></span></button>
+                    <p class="prototype-caption">MVP demo · Fictional accounts only.<br>No password or external account required.</p>
+                    <p id="access-error" class="form-error" role="alert" hidden></p>
+                    <div class="access-privacy"><span data-icon="lock"></span><div><strong>Your account verifies access only.</strong><p>Wellbeing answers are stored separately from your identity. Only aggregated results are shared with managers and HR.</p></div></div>
+                </form>
+                <p class="access-help">Having trouble signing in? <button type="button" data-policy="support">Contact support</button></p>
+            </div>
+        </div>
+        <footer class="access-footer"><span>© 2026 TeamPulse</span><nav aria-label="Information"><button type="button" data-policy="privacy">Privacy</button><button type="button" data-policy="security">Security</button><button type="button" data-policy="accessibility">Accessibility</button></nav></footer>
+    </section>
+    <aside class="sidebar" aria-label="TeamPulse workspace" hidden>
+        <a class="brand" href="#home" aria-label="TeamPulse home"><img class="brand-mark" src="/assets/teampulse-logo.svg#mark" width="140" height="136" alt=""><span>TeamPulse<span class="brand-tagline">Listen. Understand. Support.</span></span></a>
+        <nav id="employee-nav" class="navigation" aria-label="Main navigation"></nav>
+        <div class="sidebar-note"><span data-icon="shield"></span><div><strong>Privacy by design</strong><p>Only aggregated insights are shared.</p></div></div>
+        <a class="prototype-switch" href="#auth">Sign out<span>Demo access</span></a>
+        <div class="profile" hidden><span class="avatar" aria-hidden="true"></span><span><strong id="employee-name"></strong><small>Employee</small></span></div>
+    </aside>
+    <div class="workspace" hidden>
+        <header class="topbar"><div class="topbar-meta"><span id="role-badge" class="role-badge"><span data-icon="people"></span><span>Employee</span></span><span class="privacy-badge"><span data-icon="shield"></span><span id="privacy-label">Anonymous space</span></span></div><time id="today-label" hidden></time></header>
+        <main id="main-content" tabindex="-1"><div class="loading-state" role="status">Making room for your wellbeing…</div></main>
+        <footer class="page-footer"><span>TeamPulse · Listen. Understand. Support.</span><span class="demo-notice">Prototype · Sample data saved only in this browser tab.</span></footer>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="detail-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+    <noscript><p class="noscript">Please enable JavaScript to continue into the TeamPulse prototype.</p></noscript>
+</body>
+</html>
