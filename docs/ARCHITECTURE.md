@@ -16,6 +16,17 @@ PostgreSQL (identity, private, wellbeing, operations)
 
 The server serves only `public/`. There is no frontend framework/build step, ORM, separate repository layer or separate reporting server. Business modules contain their SQL; this diagram does not imply unimplemented controller/service/repository folders.
 
+The current public academic/demo deployment uses:
+
+```text
+GitHub repository
+  ↓ Render Web Service
+  ↓ Node.js / Express (serves public/ and the API)
+Neon PostgreSQL
+```
+
+Render provides HTTPS and forwards requests to the Node listener. The server uses the existing `pg` pool and injected `DB_*` settings with verified TLS (`DB_SSL=true`) to reach Neon; it does not use `DATABASE_URL`. The deployed demo explicitly enables Demo Access and uses the documented single-process MemoryStore exception. Neon has already been initialized and seeded; routine Render redeployment runs build/start commands only. FEUP is an alternative assignment infrastructure option, not the current production database.
+
 | File/module | Actual responsibility |
 | --- | --- |
 | `server/app.js` | Express composition, static files and health endpoints |
@@ -117,7 +128,7 @@ TeamPulse/
 └── package.json / package-lock.json
 ```
 
-See [db/README.md](../db/README.md) for keys, constraints and legacy differences. Weekly finalization requires an external scheduler/operator; startup never migrates, seeds or finalizes. FEUP hosting, HTTPS, database grants, backups and process supervision remain infrastructure tasks.
+See [db/README.md](../db/README.md) for keys, constraints and legacy differences. Weekly finalization requires an external scheduler/operator; startup never migrates, seeds or finalizes. Render supplies application hosting/HTTPS and Neon supplies PostgreSQL; runtime grants, backups and any maintenance scheduling remain operator responsibilities, separate from routine redeployment.
 
 ## Deterministic PostgreSQL regression fixtures
 

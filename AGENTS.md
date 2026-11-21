@@ -29,7 +29,7 @@ The current application uses:
 
 Development should initially be performed locally.
 
-FEUP deployment requires confirmation of Node.js/Express hosting and the infrastructure described in `DEPLOYMENT.md`. Do not change the stack without explicit approval.
+The current academic/demo deployment uses Render for Node.js/Express hosting and Neon PostgreSQL for persistence, as described in `DEPLOYMENT.md`. FEUP remains an alternative assignment infrastructure option. Do not change the stack without explicit approval.
 
 ---
 

@@ -11,7 +11,7 @@ function memoryStorage() {
 test("a weekly submission survives reload, rejects duplicates, and opens again next week", async () => {
     const { createDemoEmployeeApi } = await load();
     const storage = memoryStorage();
-    let clock = new Date("2026-11-09T12:00:00Z");
+    let clock = new Date("2026-11-15T12:00:00Z");
     const now = () => clock;
     const api = createDemoEmployeeApi({ storage, now });
     assert.equal((await api.getCheckinStatus()).submitted, false);
@@ -30,12 +30,50 @@ test("a weekly submission survives reload, rejects duplicates, and opens again n
     assert(!Object.hasOwn(history.latest, "challenges"));
     clock = new Date("2026-11-16T12:00:00Z");
     assert.equal((await reloaded.getCheckinStatus()).submitted, false);
+    assert.equal((await reloaded.getCheckinStatus()).available, false);
+    await assert.rejects(reloaded.submitCheckin(answers), { status: 409 });
+    clock = new Date("2026-11-20T00:00:00Z");
+    assert.equal((await reloaded.getCheckinStatus()).available, true);
     await reloaded.submitCheckin(answers);
+});
+
+for (const [instant, available, weekStart] of [
+    ["2026-11-09T12:00:00Z", false, "2026-11-09"],
+    ["2026-11-10T12:00:00Z", false, "2026-11-09"],
+    ["2026-11-11T12:00:00Z", false, "2026-11-09"],
+    ["2026-11-12T23:59:59Z", false, "2026-11-09"],
+    ["2026-11-13T00:00:00Z", true, "2026-11-09"],
+    ["2026-11-14T12:00:00Z", true, "2026-11-09"],
+    ["2026-11-15T23:59:59Z", true, "2026-11-09"],
+    ["2026-11-16T00:00:00Z", false, "2026-11-16"],
+    // In summer Lisbon is one hour ahead of UTC.
+    ["2026-07-02T22:59:59Z", false, "2026-06-29"],
+    ["2026-07-02T23:00:00Z", true, "2026-06-29"],
+    ["2026-07-05T22:59:59Z", true, "2026-06-29"],
+    ["2026-07-05T23:00:00Z", false, "2026-07-06"]
+]) test(`demo submission follows the Lisbon weekly window at ${instant}`, async () => {
+    const { createDemoEmployeeApi } = await load();
+    const storage = memoryStorage();
+    const api = createDemoEmployeeApi({ storage, now: () => new Date(instant) });
+    const status = await api.getCheckinStatus();
+    assert.equal(status.weekStart, weekStart);
+    assert.equal(status.available, available);
+    assert.equal(status.submitted, false);
+    if (available) {
+        await api.submitCheckin(answers);
+        assert.equal((await api.getCheckinStatus()).submitted, true);
+        assert.equal((await api.getCheckinStatus()).available, false);
+        await assert.rejects(api.submitCheckin(answers), { status: 409 });
+        assert.equal(JSON.parse(storage.getItem()).checkins.length, 1);
+    } else {
+        await assert.rejects(api.submitCheckin(answers), { status: 409 });
+        assert.equal(storage.getItem(), null, "closed-window attempts must not persist anything");
+    }
 });
 
 test("invalid scores, duplicate/unknown factors, and oversized comments are not saved", async () => {
     const { createDemoEmployeeApi } = await load();
-    const api = createDemoEmployeeApi({ storage: null });
+    const api = createDemoEmployeeApi({ storage: null, now: () => new Date("2026-11-13T12:00:00Z") });
     for (const payload of [
         { ...answers, wellbeing: undefined }, { ...answers, workload: 11 },
         { ...answers, stress: undefined }, { ...answers, psychologicalSafety: 0 },
@@ -111,7 +149,7 @@ test("booking times stay fixed across reloads, and the two-hour cutoff is enforc
 
 test("a storage failure leaves an operable in-memory preview", async () => {
     const { createDemoEmployeeApi } = await load();
-    const api = createDemoEmployeeApi({ storage: { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } } });
+    const api = createDemoEmployeeApi({ now: () => new Date("2026-11-13T12:00:00Z"), storage: { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } } });
     await api.submitCheckin(answers);
     assert.equal((await api.getCheckinStatus()).submitted, true);
 });
@@ -139,7 +177,8 @@ test("HTTP adapter uses Employee endpoints and never treats an API error as a de
     } finally { globalThis.fetch = originalFetch; }
 });
 
-test("Employee views support demo data and first-time API histories without database requests", async () => {
+test("Employee views support demo data and first-time API histories without database requests", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-13T12:00:00Z").getTime() });
     // A small DOM stand-in exercises module startup and route rendering. This is
     // a component smoke check, not a replacement for visual/browser verification.
     const originals = new Map();
@@ -239,7 +278,8 @@ test("Employee views support demo data and first-time API histories without data
     }
 });
 
-test("check-in handlers preserve raw answers across Back/Continue and submit all five scores", async () => {
+test("check-in handlers preserve raw answers across Back/Continue and submit all five scores", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-13T12:00:00Z").getTime() });
     const originals = new Map(), nodes = new Map(), windowEvents = new Map();
     const install = (key, value) => {
         originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -389,6 +429,62 @@ test("check-in handlers preserve raw answers across Back/Continue and submit all
             teamIntegration: "connected", psychologicalSafety: 1, challenges: [], comment: "" });
         completePost(); await pendingSubmission;
         assert(html.includes("Thank you for checking in."));
+
+        for (const outcome of ["completed", "closed", "status-unavailable"]) {
+            await t.test(`409 refreshes authoritative status: ${outcome}`, async () => {
+                let posts = 0, refreshes = 0, resolveStatus, statusRequested;
+                const refreshing = new Promise((resolve) => { statusRequested = resolve; });
+                const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+                globalThis.fetch = async (url, options = {}) => {
+                    const path = new URL(url, "http://test.invalid").pathname;
+                    if (path === "/api/employee/check-ins" && options.method === "POST") {
+                        posts++;
+                        return { ok: false, status: 409 };
+                    }
+                    if (path === "/api/employee/check-ins/current") {
+                        if (!posts) return ok({ submitted: false, available: true,
+                            weekStart: "2026-11-09", nextWeek: "2026-11-16" });
+                        refreshes++;
+                        return new Promise((resolve) => { resolveStatus = resolve; statusRequested(); });
+                    }
+                    const fixtures = {
+                        "/api/employee/me": { firstName: "Ana", displayName: "Ana Silva", role: "employee" },
+                        "/api/employee/history": { entries: [], latest: null, monthlyChange: null },
+                        "/api/employee/activities": [], "/api/employee/appointment-reminders": []
+                    };
+                    assert(Object.hasOwn(fixtures, path), `Unexpected request: ${path}`);
+                    return ok(fixtures[path]);
+                };
+                globalThis.location.hash = "#check-in";
+                await import(`../public/js/app.mjs?checkin-conflict-${outcome}`);
+                await accessEvents.get("submit")({ preventDefault() {}, currentTarget: accessForm });
+                globalThis.location.hash = "#check-in"; await windowEvents.get("hashchange")();
+                set({ wellbeing: "positive" }); await submit();
+                set({ workload: "manageable", stress: "4" }); await submit();
+                set({ teamIntegration: "connected", psychologicalSafety: "1" }); await submit();
+                const staleForm = nodes.get("#checkin-form");
+                const staleSubmit = () => staleForm.events.get("submit")({ preventDefault() {} });
+                const pending = staleSubmit();
+                await refreshing;
+                assert.equal(staleForm.submitButton.disabled, true, "must stay disabled during status refresh");
+                await staleSubmit(); assert.equal(posts, 1);
+                if (outcome === "status-unavailable") resolveStatus({ ok: false, status: 503 });
+                else resolveStatus(ok({ submitted: outcome === "completed", available: false,
+                    weekStart: outcome === "closed" ? "2026-11-16" : "2026-11-09",
+                    nextWeek: outcome === "closed" ? "2026-11-23" : "2026-11-16", opensOn: "2026-11-20" }));
+                await pending;
+                assert.equal(refreshes, 1);
+                assert(!html.includes('id="checkin-form"'));
+                assert.equal(staleForm.submitButton.disabled, true, "the stale button must never be re-enabled");
+                if (outcome === "completed") assert(html.includes("Thank you for checking in."));
+                if (outcome === "closed") {
+                    assert(html.includes("Opens Friday"));
+                    assert(!html.includes("Thank you for checking in."));
+                }
+                if (outcome === "status-unavailable") assert(html.includes('class="error-panel"'));
+                await staleSubmit(); assert.equal(posts, 1, "the old handler must not submit again after refresh");
+            });
+        }
     } finally {
         for (const [key, descriptor] of originals) {
             if (descriptor) Object.defineProperty(globalThis, key, descriptor);

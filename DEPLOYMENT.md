@@ -1,13 +1,25 @@
-# TeamPulse deployment preparation
+# TeamPulse deployment — Render + Neon
 
-This prepares the existing Node/Express application; it does not deploy it or
-implement FEUP SSO. The approved UI, calculations, privacy rules and business
-data are unchanged. Remote fictional demo access requires explicit configuration.
+The current public academic/demo deployment is **GitHub → Render Web Service →
+Node.js + Express → Neon PostgreSQL**. Render hosts the process and provides
+HTTPS; Neon is the external database. Demo Access is explicitly enabled for
+fictional accounts; real SSO is not a prerequisite for this MVP.
+
+**The current Neon database has already been initialized and seeded.** Routine
+Render redeployments run `npm ci` and `npm start` only: never add `db:init`, seed,
+expansion, migration or finalization commands to build/start/pre-deploy steps.
+New-database procedures below are reference instructions, not a request to rerun
+setup against the existing Neon or local demo database. FEUP is a separately
+labelled alternative assignment infrastructure option, not current production.
 
 ## Clean development/demo installation
 
 Requirements: Node.js 22 or later, npm, and an **empty dedicated PostgreSQL 13+
-database**. Verification used Node 26.13 and PostgreSQL 18.3. The database must
+database** for a new installation only (local PostgreSQL or a new Neon database).
+For Neon maintenance/initialization use its direct endpoint and `DB_SSL=true`.
+Shared databases use the separate explicit
+initialization path documented below. Verification used Node 26.13 and PostgreSQL
+18.3. The database must
 already exist; its maintenance account needs permission to create schemas,
 tables, functions, triggers and indexes. Provisioning database roles/grants is
 an infrastructure task, not part of the application seed.
@@ -24,14 +36,8 @@ On PowerShell use `Copy-Item .env.example .env`. If execution policy blocks
 Edit `.env`: fill all five `DB_*` connection fields for your supplied database.
 The example port 5432 is not a runtime default; use your actual PostgreSQL port.
 Keep `MIN_RESPONSES=5` for the approved demo. Do not copy another person's secrets.
-For an administrator provisioning a local database using the example defaults:
-
-```sh
-createdb --host=127.0.0.1 --port=5432 --username=YOUR_ADMIN_LOGIN --pwprompt teampulse
-```
-
-Replace `YOUR_ADMIN_LOGIN` and connection arguments as appropriate. On a managed
-server, use the empty database supplied by its administrator instead. TeamPulse's
+Have an administrator provision the empty local database, or use a new managed
+database explicitly reserved for this installation. TeamPulse's
 Node setup commands do not depend on `psql`, `createdb`, a Windows installation
 directory, or shell-specific SQL quoting.
 
@@ -47,10 +53,11 @@ or HR under **Demo access**, then **Enter demo**. Requests use relative `/api/..
 URLs and the same origin. No Microsoft, FEUP, Google or email login is involved.
 
 Run all tests, including PostgreSQL, sequentially against a separately initialized
-and seeded **disposable local baseline**, not the existing demo or FEUP database.
+and seeded **disposable local baseline**, never Neon, FEUP or the existing demo.
 The test/maintenance login needs DDL and `CREATEDB` privileges: reporting tests
-create and remove additional disposable databases. Configure `DB_NAME` to that
-baseline in the test shell before running:
+create and remove additional disposable databases. Explicitly configure `DB_HOST`
+to loopback, `DB_NAME` to that baseline and its test credentials in the test shell
+before running; do not inherit a live deployment connection:
 
 ```sh
 TEAMPULSE_TEST_POSTGRES=1 npm test
@@ -60,6 +67,8 @@ PowerShell:
 
 ```powershell
 $env:TEAMPULSE_TEST_POSTGRES='1'
+# DB_* must already select the disposable local baseline.
+Remove-Item Env:TEAMPULSE_DEMO_BASELINE -ErrorAction SilentlyContinue
 npm.cmd test
 ```
 
@@ -67,6 +76,10 @@ Without that variable the PostgreSQL tests explicitly report skips; unit/API
 fixtures still run. Do not run this integration suite against real employee data.
 Its transaction fixtures roll back, but generated identity sequences may advance
 in the configured baseline, which is why that baseline must also be disposable.
+The current verified complete baseline is **243 total / 243 passed / 0 failed /
+0 skipped**, verified on 20 November 2026. Set `TEAMPULSE_TEST_POSTGRES=0` for
+non-database verification. A no-DDL/no-seed/no-database-writes task cannot safely
+reproduce the complete run; do not change tests to hide that limitation.
 
 ## Configuration contract
 
@@ -101,28 +114,48 @@ trusted bootstrap through `startServer({ sessionStore })` /
 `createApp({ sessionStore })`. Default or explicit MemoryStore is rejected unless
 the fictional demo is explicitly enabled. No store vendor is assumed.
 
+### Neon connection settings and endpoint types
+
+The application uses separate `DB_*` fields through `pg`, not `DATABASE_URL`.
+Copy only the selected endpoint hostname into `DB_HOST`; put the supplied port,
+database and role into `DB_PORT`, `DB_NAME` and `DB_USER`. Enter `DB_PASSWORD`
+privately and set `DB_SSL=true`. The existing client verifies certificates;
+a publicly trusted certificate needs no `DB_SSL_CA_FILE`. Do not paste a full
+connection string into source, documentation, logs or the hostname field.
+
+Neon offers direct and pooled endpoints. Pooled hostnames contain `-pooler` and
+use transaction pooling, which limits session-dependent features. Use the direct
+endpoint for initialization, migrations and maintenance. For runtime, retain the
+configured working endpoint; choosing pooling is a separate operational decision.
+Both use the same `DB_*` contract and verified TLS. Keep `DB_POOL_MAX=5` unless an
+authorized connection-budget change is required; it limits the application's
+own `pg` pool even with a pooled endpoint. See [Neon pooling](https://neon.com/docs/connect/connection-pooling)
+and [secure connections](https://neon.com/docs/connect/connect-securely).
+
 ### Render deployment
 
-The approved architecture is **Render Web Service -> Node.js + Express -> FEUP
-PostgreSQL (`db.fe.up.pt`)**. Render hosts the application process; FEUP supplies
-the database. No PHP/Python conversion, frontend URL change, schema change or SSO
-integration is required. This section is a manual runbook, not an executed deploy.
+The current architecture is **GitHub → Render Web Service → Node.js + Express →
+Neon PostgreSQL**. This runbook documents the deployed academic/demo configuration;
+editing it does not change Render settings or execute a deployment. No backend
+conversion, frontend URL change, schema change or SSO integration is required.
 
 | Environment | Application | Database |
 | --- | --- | --- |
-| Development | `http://localhost:3000` by default, or the configured local `PORT` | Local PostgreSQL |
-| Academic production | The HTTPS URL assigned to the Render Web Service | FEUP PostgreSQL with administrator-supplied database/user/port/TLS settings |
+| Development | `http://localhost:3000` by default, or the configured local `PORT` | Local PostgreSQL, or an explicitly authorized managed development connection |
+| Academic production | The HTTPS URL assigned to the Render Web Service | The existing initialized/seeded Neon PostgreSQL database, with verified TLS |
 
 1. **GitHub:** review and push the application to your repository, including
    `package-lock.json`. Exclude `.env`, credentials, backups and `node_modules/`.
-   This workspace may be a source copy without `.git`; initialize/connect Git
-   separately if necessary. No push is performed by this preparation.
-2. **Render:** choose **New > Web Service**, connect the GitHub repository and
-   select the reviewed branch. Choose the **Node** runtime and the repository
+   Include `tests/database-initialization.test.js` along with the other legitimate
+   tests. No commit or push is performed by this documentation pass.
+2. **Render service configuration:** retain the existing service for routine
+   redeployment. For a new service, choose **New > Web Service**, connect the
+   GitHub repository and select the reviewed branch. Choose the **Node** runtime and the repository
    root as Root Directory. Use **Build Command: `npm ci`**, **Start Command:
    `npm start`**, and **Health Check Path: `/api/health`**. There is no frontend
    compilation step. Keep a single instance for the existing in-memory demo
-   sessions. Leave pre-deploy/database commands empty; initialization is manual.
+   sessions. Leave pre-deploy/database commands empty. The existing Neon database
+   is already set up; redeployments must not reinitialize or seed it.
 3. **Environment:** configure the following in Render before the first deploy.
    Use Render's secret fields for passwords/session secrets, never source files.
 
@@ -137,20 +170,20 @@ integration is required. This section is a manual runbook, not an executed deplo
    | `MIN_RESPONSES` | `5`, unchanged |
    | `SESSION_SECRET` | A fresh secret generated from at least 32 cryptographically random bytes, e.g. the command above |
    | `TRUST_PROXY` | `1` for the immediately upstream Render managed ingress, subject to the conditions below |
-   | `DB_HOST` | `db.fe.up.pt`, subject to FEUP confirmation of the externally reachable hostname |
-   | `DB_PORT` | The PostgreSQL port supplied by FEUP; do not assume the local port |
-   | `DB_NAME` | The dedicated database supplied by FEUP |
-   | `DB_USER` | The FEUP-provisioned application database login |
+   | `DB_HOST` | The selected Neon endpoint hostname, without a URL or credentials |
+   | `DB_PORT` | The supplied Neon PostgreSQL port, normally `5432` |
+   | `DB_NAME` | The supplied Neon database name |
+   | `DB_USER` | The supplied Neon application database role |
    | `DB_PASSWORD` | That login's password, entered privately in Render |
-   | `DB_SSL` | `true` when FEUP provides/requires TLS; confirm with its administrator before deployment |
-   | `DB_SSL_CA_FILE` | Only if FEUP uses a private CA: path to the CA certificate mounted as a Render secret file, e.g. `/etc/secrets/feup-postgres-ca.pem` |
-   | `DB_POOL_MAX` | `5`, unless FEUP's connection budget requires a smaller pool |
+   | `DB_SSL` | `true`, required for Neon; certificate verification remains enabled |
+   | `DB_SSL_CA_FILE` | Normally omitted for Neon's publicly trusted certificate; only supply a readable custom CA file when required by the administrator |
+   | `DB_POOL_MAX` | `5`, within the authorized database connection budget |
 
    The five connection variables are mandatory. TLS keeps certificate verification
    enabled; there is no insecure certificate-bypass option. A publicly trusted CA
-   needs no custom CA file. Obtain the correct TLS mode/certificate before making
-   the first FEUP connection. Do not place FEUP values in `.env.example` or commit
-   a credential file. Neither a Render URL nor `DATABASE_URL` is needed by this app.
+   needs no custom CA file. Do not place real Neon connection details/secrets in
+   `.env.example` or commit a credential file. Neither a Render URL nor
+   `DATABASE_URL` is needed by this app.
 
    Render requires the public listener on `0.0.0.0`; the existing `HOST` setting
    provides that explicitly while preserving loopback as the local default.
@@ -176,18 +209,18 @@ integration is required. This section is a manual runbook, not an executed deplo
    production without demo mode still rejects MemoryStore and requires a trusted
    persistent session-store integration. No new session architecture is added.
 
-4. **Deploy manually** after confirming that FEUP permits connections from the
-   chosen Render service's outbound network, its firewall permits the supplied
-   PostgreSQL port, and the database login/TLS configuration are ready. VPN-only
-   or campus-only access would block this architecture until FEUP supplies a
-   supported connectivity route. This task does not verify FEUP reachability.
+4. **Routine redeployment:** deploy the reviewed GitHub revision through the
+   existing Render service using the build/start commands above. Keep the
+   existing working Neon connection and secret settings; do not run database
+   setup or change settings merely for a documentation update.
    Startup makes a SELECT-only connection check before listening; unavailable
    PostgreSQL makes startup fail safely. It never initializes/migrates/seeds.
    An empty but reachable database can pass process health while role APIs still
-   need setup; complete step 5 before using the academic demo.
-5. **Set up the database manually**, from a trusted workstation or authorized
-   one-off maintenance shell with Node/npm, the reviewed source, FEUP network
-   access and maintenance credentials injected privately into that process.
+   need setup. Step 5 applies only to a new installation; the current Neon
+   database has already completed it.
+5. **New database setup only:** from a trusted workstation or authorized one-off
+   maintenance shell with Node/npm, the reviewed source, Neon's direct endpoint
+   and maintenance credentials injected privately into that process.
    Keep the deployed service's runtime login separate from schema-maintenance
    privileges. Do not give the runtime login superuser or `CREATEDB` privileges.
 
@@ -199,13 +232,50 @@ integration is required. This section is a manual runbook, not an executed deplo
    ```
 
    `db:init` creates the consolidated schema and refuses nonempty databases.
+   **Alternative/historical assignment infrastructure — shared FEUP database:**
+   FEUP is not the current production database. VPN/private-network-only access
+   from a laptop does not establish Render reachability; any future FEUP option
+   needs an administrator-supported network route, TLS and grants. No VPN bypass
+   is assumed. For a shared FEUP database such as `mesg2607`, use this alternative only
+   after FEUP confirms that `identity`, `private`, `wellbeing`, and `operations`
+   are available and reserved for TeamPulse.
+
+   ```sh
+   npm run db:init -- --shared
+   ```
+
+   On PowerShell, use `npm.cmd run db:init -- --shared` if needed. The existing
+   environment variables select the database; the flag does not select FEUP or
+   supply credentials. This is a future alternative maintenance step, not a
+   command for the current Neon deployment or this documentation pass.
+
+   Shared mode permits unrelated `public` tables and other projects' schemas
+   because the existing TeamPulse objects use schema-qualified names. It checks
+   all four target names through `pg_catalog.pg_namespace`, including names not
+   exposed by `information_schema`. If any target schema exists, even empty or
+   owned by someone else, initialization stops before application DDL. It never
+   reuses, drops, renames or repairs an occupied namespace. Do not remove another
+   project's schema to make this command succeed; resolve reservations with FEUP.
+
+   The existing schema body runs in one transaction under the existing setup
+   advisory lock. A creation error rolls back all TeamPulse objects created by
+   that attempt. Shared mode uses a transaction-local trusted search path and
+   preserves unrelated objects/data. It creates the same four schemas and 15
+   tables as dedicated mode, with no credentials, grants or application rows.
+   **Demo seed/expansion, migrations and week finalization are not part of shared
+   initialization. Do not run demo seeding/expansion against FEUP as part of this
+   procedure.** Existing `npm run db:init` without the flag retains its empty-
+   dedicated-database restriction. `--shared` is rejected for other commands.
+
    Fresh schema already contains both approved migrations. For an existing
    database, take a private backup, omit `db:init`, inspect with the same migration
    check and run `npm run db:migrate` only if it reports pending approved upgrades.
    Unsupported/partial older schemas need review rather than automatic repair.
 
-   If this is the first setup of an **empty fictional academic demo**, seed the
-   existing approved fixtures once, in a separate maintenance process only:
+   If this is the first setup of an **empty, dedicated fictional demo database
+   (local or new Neon)**, seed the existing approved fixtures once, through its
+   direct connection in a separate maintenance process only. This does not apply
+   to the current already-seeded Neon database:
 
    ```sh
    NODE_ENV=development npm run db:seed:demo
@@ -217,7 +287,8 @@ integration is required. This section is a manual runbook, not an executed deplo
    seeding remains forbidden. The seeder refuses nonempty TeamPulse tables and
    requires `MIN_RESPONSES=5`. Do not seed an existing demo or real employee data.
    It reuses the existing fixtures, not a new account/data-generation feature.
-   No initialization, migration or seed against FEUP is performed by this task.
+   No initialization, migration or seed against any database is performed by this
+   documentation task.
 
    Have the administrator apply the existing runtime access policy to the
    initialized schemas/functions/tables. Database credentials belong only to the
@@ -243,7 +314,8 @@ integration is required. This section is a manual runbook, not an executed deplo
 After initial setup, the existing `npm run db:finalize-weeks` remains an explicit
 maintenance operation after Monday 00:00 Europe/Lisbon (or a separately configured
 scheduler). It is not part of build/start and does not fabricate answers. Do not
-run the PostgreSQL integration tests against FEUP: they require disposable local
+run the PostgreSQL integration tests against Neon, FEUP or the existing local demo:
+they require disposable local
 databases and test-only DDL privileges. Local complete tests use
 `TEAMPULSE_TEST_POSTGRES=1 npm test` with a disposable configured baseline too,
 so rollback tests cannot advance sequences in the existing local demo database.
@@ -254,15 +326,18 @@ Platform references: [Render Web Services](https://render.com/docs/web-services)
 [health checks](https://render.com/docs/health-checks), and
 [Express proxy trust](https://expressjs.com/en/guide/behind-proxies/).
 
-Local Render-preparation verification on 18 November 2026: `npm ci` succeeded;
+Historical local Render-preparation verification on 18 November 2026: `npm ci` succeeded;
 the complete suite reported **216 tests, 216 passed, 0 failed, 0 skipped** with
 PostgreSQL enabled and a disposable baseline. A separate `npm start` smoke check
 used `NODE_ENV=production`, `HOST=0.0.0.0`, an injected non-default `PORT`, a random
 session secret and `TRUST_PROXY=1`. Process/database health, frontend/assets,
 HTTPS recognition, all three existing demo logins, secure cookie flags and
 authorized dashboard reads passed against local test PostgreSQL. Forwarded HTTPS
-was simulated locally; actual Render ingress and FEUP connectivity still require
-the manual checks above. No FEUP connection or external deployment was performed.
+was simulated locally; that historical pass did not connect to FEUP or deploy
+externally. The application has since been deployed successfully to Render with
+Neon, and local application testing against Neon succeeded. Those deployment
+facts are the approved project state, not new checks executed by this document
+cleanup. The current verified complete test baseline is 243/243, recorded above.
 
 ## External academic MVP demo access
 
@@ -272,17 +347,20 @@ Configure the existing application process explicitly for a fictional demo:
 NODE_ENV=production
 DEMO_AUTH_ENABLED=true
 HOST=0.0.0.0
-PORT=3000
 MIN_RESPONSES=5
+TRUST_PROXY=1
+DB_SSL=true
 ```
 
-Also supply the existing `DB_*` settings and a privately generated
+Let Render provide `PORT`; do not pin the local port in production. Also supply
+the existing Neon `DB_*` settings and a privately generated
 `SESSION_SECRET` of at least 32 characters. There are no demo passwords. Do not
 publish `.env`, credentials, database access, or the Node port directly.
 
 Serve the application at the root of an HTTPS origin through the deployment's
-TLS reverse proxy. Set `TRUST_PROXY` to that proxy's actual trusted IP/CIDR
-(for example `127.0.0.1,::1/128` for a verified same-host proxy). Without trusted
+TLS reverse proxy. The current Render setup uses `TRUST_PROXY=1` only for its
+immediate managed ingress, with the boundary conditions above. An alternative
+verified proxy can use its actual trusted IP/CIDR. Without trusted
 HTTPS, production demo sign-in is refused; arbitrary forwarded headers do not
 enable it. Same-origin checks, HttpOnly/SameSite=Strict/Secure cookies, session
 regeneration and the existing eight-hour session lifetime remain in force.
@@ -305,7 +383,8 @@ integration must use the existing session/authorization boundary separately.
 `GET /api/demo-access` returns only the request's demo availability. A disabled or
 unreachable service keeps the login controls disabled. Login does not insert or
 modify users: the three subjects must already exist and be active in PostgreSQL.
-This preparation does not provision hosting, DNS, TLS or deploy a public URL.
+The public deployment uses Render HTTPS; this documentation pass does not
+provision hosting, change settings or redeploy it.
 
 Startup validates configuration, performs a SELECT-only PostgreSQL check, and
 then binds the listener. It does not initialize, migrate or seed a database.
@@ -316,7 +395,11 @@ production `/api/health/db` omits database/user diagnostics.
 ## Schema, migrations and reproducible data
 
 `db:init` applies the **current consolidated** `db/schema.sql` transactionally,
-only to an empty dedicated database. It refuses to reset existing tables/schemas.
+only to an empty dedicated database by default. `npm run db:init -- --shared`
+explicitly allows unrelated objects in a shared database, but still requires all
+four target namespaces to be absent. Both paths refuse to reset/reuse occupied
+TeamPulse schemas. Confirm namespace reservations before FEUP initialization;
+shared mode does not seed or expand data. See the Render manual setup above.
 Fresh databases contain 15 application tables. An unused legacy intervention
 table in the existing local database is deliberately not recreated.
 
@@ -405,7 +488,7 @@ accept roles, teams or user IDs from an unverified browser claim.
 The SSO callback contract, identity provisioning, logout, CSRF/state handling and
 cookie requirements depend on the real provider. No FEUP protocol is assumed.
 
-## Audit findings and remaining deployment blockers
+## Preserved implementation decisions and real-user limitations
 
 - Runtime database endpoints/credentials were already environment-based. Added
   strict validation, explicit TLS/CA support and configurable pool/bind settings.
@@ -424,8 +507,10 @@ cookie requirements depend on the real provider. No FEUP protocol is assumed.
   built-in `node:test` plus dev-only Supertest. Remaining dependency versions were
   not upgraded. `npm test` now runs the actual suite in sequence.
 
-**Code blockers:** provider-specific SSO callbacks/sign-in integration and a
-persistent session-store adapter/bootstrap are still required for real users.
+**Real-user requirements, not academic MVP deployment blockers:** provider-specific
+SSO integration and a persistent session-store adapter/bootstrap are required
+before using real identities. The current fictional Demo Access deployment
+intentionally uses neither real SSO nor a new session store.
 For ongoing use, operate `npm run db:finalize-weeks` after Monday 00:00 Lisbon,
 or periodically using the deployment scheduler. It is idempotent and closes only
 elapsed open cohorts using the existing database locks/triggers. It never changes
@@ -437,20 +522,21 @@ Support booking, Home reminders, rescheduling and cancellation now share the
 Employee-owned PostgreSQL records. Browser-only preview data is used only by the
 explicit static demo adapter, never as fallback for the PostgreSQL application.
 
-**Infrastructure blockers:** supply Node process hosting, an appropriately
-restricted PostgreSQL runtime identity and separate maintenance privileges,
-database connectivity/TLS, HTTPS termination, persistent sessions, secrets and
-backups. Configure proxy trust only for the actual network topology. Deployment
-and process supervision are not installed by this preparation task.
+**Current hosting and ongoing operations:** Render supplies Node process hosting
+and public HTTPS; Neon supplies PostgreSQL. Preserve restricted runtime access,
+separate maintenance privileges, verified TLS and private secrets. Backups and
+any cohort-maintenance schedule remain operator responsibilities. Multiple
+instances or real-user use require persistent sessions; the known academic/demo
+MemoryStore limitation is documented above. This pass changes no infrastructure.
 
-**Approved hosting:** Render runs Node/Express; FEUP hosts PostgreSQL. FEUP does
-not need to provide Node hosting for this architecture. Still confirm externally
-reachable database hostname/port, network allowlisting, PostgreSQL version,
-database grants and TLS/CA requirements. Real SSO remains outside this academic
-demo; it is not a prerequisite for the explicitly enabled fictional accounts.
+**Alternative assignment infrastructure:** FEUP PostgreSQL is not the current
+production database. A future FEUP deployment needs confirmation of network
+reachability from its chosen app host, PostgreSQL grants and TLS/CA requirements.
+The shared initialization option is preserved; it is not a reason to reconnect,
+seed or otherwise change FEUP. Real SSO remains outside the academic demo.
 
-Prepared for configured academic demo access; a public deployment still requires
-the infrastructure above. Authentication for real users is not implemented.
+The public Render + Neon academic demo is deployed. Authentication for real users
+is not implemented and is not claimed by Demo Access.
 
 ## Local handoff checklist
 
@@ -463,6 +549,9 @@ the infrastructure above. Authentication for real users is not implemented.
   `db/migrations/20261111_manager_action_plans.sql` and
   `db/migrations/20261111_activity_insights.sql`; use the shape check before
   upgrading. Do not apply them blindly after a fresh schema installation.
+- [ ] Optional alternative FEUP setup only: reserve/confirm the four target schema names, then use
+  the explicit `npm run db:init -- --shared` manual path. Never use it to reset
+  an existing TeamPulse installation; no demo seed/expansion is included.
 - [ ] Demo seed sources: `db/seed.sql`, `db/expand-demo.cjs`, and the catalogue
   preparation in `db/manage.cjs`. Run the documented clean-install commands only
   against a dedicated empty database. No automatic reseed/reset on startup.

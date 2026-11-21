@@ -20,7 +20,7 @@ When these instructions overlap, preserve the stricter privacy, security and pro
 
 ## 2. Current Implementation Stack
 
-The current local implementation uses:
+The current implementation uses:
 
 - Node.js
 - Express
@@ -31,7 +31,7 @@ The current local implementation uses:
 - SVG charts
 - Built-in `node:test` + Supertest for testing
 
-The PostgreSQL database is currently running locally during development.
+Development can use local PostgreSQL or an explicitly configured managed database. The current deployed academic/demo application runs on Render with Neon PostgreSQL.
 
 The repository already contains:
 
@@ -46,7 +46,7 @@ The repository already contains:
 
 Do not migrate the application to PHP or another backend stack unless explicitly requested.
 
-The final FEUP deployment environment may require additional configuration. Deployment-specific decisions must not cause unnecessary changes to the local implementation.
+The current Render + Neon deployment is documented in `DEPLOYMENT.md`; FEUP is an alternative assignment infrastructure option. Deployment-specific decisions must not cause unnecessary changes to the local implementation.
 
 ---
 

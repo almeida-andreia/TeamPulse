@@ -37,7 +37,7 @@ function createEmployeeCheckins(getPool) {
     async function prototypeEmployee() {
         // Fixed existing fictional presentation account: Platform Employee with
         // private history and an existing appointment. Never caller-selected.
-        // Real SSO must replace prototype access before deployment.
+        // Academic deployments intentionally use Demo Access; real-user SSO is separate.
         const { rows } = await getPool().query(`SELECT user_id FROM identity.users
             WHERE sso_issuer = $1 AND sso_subject = $2 AND role = 'employee' AND is_active`,
         ["https://sso.example.invalid", "employee-05"]);

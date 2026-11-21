@@ -113,7 +113,7 @@ test("legacy continuous browser history survives unchanged and missing stress re
     await assert.rejects(api.submitCheckin(answers), { status: 409 });
     assert(!JSON.stringify(history).includes("Legacy private context"));
     assert(!JSON.stringify(history).includes("tools_processes"));
-    const nextWeek = createDemoEmployeeApi({ storage, now: () => new Date("2026-11-17T12:00:00Z") });
+    const nextWeek = createDemoEmployeeApi({ storage, now: () => new Date("2026-11-20T12:00:00Z") });
     await nextWeek.submitCheckin(answers);
     const persisted = JSON.parse(saved);
     assert.deepEqual(persisted.checkins[0], old.checkins[0]);

@@ -1,5 +1,5 @@
 // Approved raw-answer contract and normalization. Pure ES module: also importable
-// by the future Express service, which MUST validate raw inputs server-side.
+// by the existing Express service, which validates raw inputs server-side.
 // Browser/demo validation is not authentication, authorization or persistence.
 const choices = (items) => Object.freeze(items.map(([id, label, score, description]) => Object.freeze({ id, label, score, ...(description ? { description } : {}) })));
 export const ANSWER_OPTIONS = Object.freeze({

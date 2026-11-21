@@ -205,7 +205,7 @@ test("PostgreSQL HR activity management and Employee support integration (all fi
                 for (const other of [hr, manager, request.agent(app)])
                     await other.post(`/api/employee/activities/${upcoming.id}/registrations`).send({}).expect(other === hr || other === manager ? 403 : 401);
             });
-            await t.test("existing activities, all 167 responses and Manager plans remain intact; source snapshot is protected by SQL", async () => {
+            await t.test("existing activity and response fingerprints and Manager plans remain intact; source snapshot is protected by SQL", async () => {
                 for (const row of original) assert.deepEqual((await client.query("SELECT to_jsonb(a) AS data FROM operations.activities a WHERE activity_id=$1", [row.activity_id])).rows[0].data, row.data);
                 for (const row of originalRegistrations) assert.deepEqual((await client.query("SELECT to_jsonb(r) AS data FROM private.activity_registrations r WHERE activity_id=$1 AND user_id=$2", [row.activity_id, row.user_id])).rows[0].data, row.data);
                 assert.deepEqual(await fingerprint(), before);

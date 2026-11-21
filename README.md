@@ -31,6 +31,8 @@ PostgreSQL: identity / private / wellbeing / operations schemas
 
 See [architecture and folder structure](docs/ARCHITECTURE.md) and the [database model](db/README.md).
 
+The current public academic/demo deployment is live using **GitHub → Render Web Service → Node.js/Express → Neon PostgreSQL**. Render provides HTTPS and runs the application; Neon stores its persisted data. It uses the same explicitly enabled Demo Access described above. The Neon database has already been initialized and seeded; routine redeployments do not initialize or seed it again.
+
 ```text
 TeamPulse/
 ├── public/             # Only web-served directory: HTML, css/, js/, assets/
@@ -41,21 +43,21 @@ TeamPulse/
 ├── SPEC.md             # Requirements and approved MVP decisions
 ├── AGENTS.md           # Development/privacy rules
 ├── CLAUDE.md           # Additional development instructions
-├── DEPLOYMENT.md       # Configuration and deployment preparation
+├── DEPLOYMENT.md       # Render + Neon configuration and deployment runbook
 ├── .env.example        # Configuration template; no real credentials
-└── package.json        # Runtime dependencies and npm commands
+└── package.json / package-lock.json  # Dependencies, npm commands and locked versions
 ```
 
 ## Local setup
 
-Install Node.js/npm and PostgreSQL first. From the project root:
+Use Node.js 22+, npm and an available PostgreSQL database. PostgreSQL can run locally or be supplied by an authorized managed service; the application uses its installed `pg` driver and does not require `psql`. From the project root:
 
 ```sh
 npm ci
 cp .env.example .env
 ```
 
-On PowerShell, use `Copy-Item .env.example .env`; use `npm.cmd` if execution policy blocks `npm.ps1`. Do not overwrite an already configured `.env`. Fill `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` privately. Use the actual supplied port; 5432 in the example is not a runtime default. Keep the approved `MIN_RESPONSES=5` and explicitly enable fictional demo access as needed. Never commit `.env`.
+On PowerShell, use `Copy-Item .env.example .env`; use `npm.cmd` if execution policy blocks `npm.ps1`. Do not overwrite an already configured `.env`. Fill `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` privately. Injected environment variables override `.env`; the application does not use `DATABASE_URL`. Use the supplied port; 5432 in the example is not a runtime default. Neon requires `DB_SSL=true` with certificate verification. Keep the approved `MIN_RESPONSES=5` and explicitly enable fictional demo access as needed. Never commit `.env`.
 
 For a **new empty dedicated demo database only**, provision the database with an administrator, then:
 
@@ -65,7 +67,7 @@ npm run db:migrate -- --check
 npm run db:seed:demo
 ```
 
-These commands are not an instruction to reset the existing local database. Fresh initialization creates 15 tables; the demo command runs the base seed, deterministic expansion and catalogue fixtures transactionally. Seeding requires empty tables and is forbidden in production. Existing installations need a backup and a reviewed upgrade, not another seed. See [database documentation](db/README.md) for historical differences.
+These commands are not an instruction to reset the existing local or Neon database. Fresh initialization creates 15 tables; the demo command runs the base seed, deterministic expansion and catalogue fixtures transactionally. Seeding requires empty TeamPulse tables and is forbidden when `NODE_ENV=production`. Existing installations need a backup and a reviewed upgrade, not another seed. Shared databases have a separate explicit `npm run db:init -- --shared` path; see [database documentation](db/README.md) for its safeguards and historical differences.
 
 Start the configured application:
 
@@ -81,7 +83,9 @@ Open `http://127.0.0.1:3000` (or the configured `HOST`/`PORT`). Startup validate
 npm test
 ```
 
-This runs `node --test --test-concurrency=1`. To include PostgreSQL integrations against a **fictional test/demo database**:
+This runs `node --test --test-concurrency=1`. Without `TEAMPULSE_TEST_POSTGRES=1`, PostgreSQL integrations report skips. The **current verified complete baseline is 243 total / 243 passed / 0 failed / 0 skipped**, verified on 20 November 2026, including FR5, shared initialization and the check-in consistency regressions.
+
+The full suite requires a **separately initialized and seeded disposable local baseline**. First configure `DB_HOST` to loopback and `DB_NAME` to that disposable database, with its test credentials in the test shell. Never point the suite at Neon, FEUP, the existing local demo or real employee data. The test identity needs DDL and `CREATEDB` privileges; the deployed runtime identity does not. Then:
 
 ```sh
 TEAMPULSE_TEST_POSTGRES=1 npm test
@@ -91,12 +95,12 @@ PowerShell:
 
 ```powershell
 $env:TEAMPULSE_TEST_POSTGRES='1'
+# DB_* must already select the disposable local baseline.
+Remove-Item Env:TEAMPULSE_DEMO_BASELINE -ErrorAction SilentlyContinue
 npm.cmd test
 ```
 
-Without the opt-in variable the database integrations report skips. Integration fixtures use rollback; PostgreSQL identity sequences may still advance. Do not run the suite against real employee data. `TEAMPULSE_DEMO_BASELINE`, if used, is an optional private maintenance snapshot, not an invariant after legitimate later registrations or submissions. Static dated demo cohorts do not automatically move forward as the calendar advances.
-
-Reporting-dependent integrations now use disposable PostgreSQL databases and a fixed test clock rather than the live demo's calendar state. The test account needs `CREATEDB`; the deployed runtime account does not. The full regression after FR5 reports **216 passed / 0 failed / 0 skipped** (207 previous tests plus nine new FR5 tests/subtests). See [database verification notes](db/README.md#documentation-verification-on-16-november-2026) for the earlier calendar-dependent failures and their resolution. Unset `TEAMPULSE_DEMO_BASELINE` when running isolated fixtures; a live maintenance snapshot is not their expected dataset.
+Reporting/FR5 tests create and remove additional disposable databases with a fixed test clock. Other integrations roll back writes but can still advance sequences in the configured baseline. Full integration testing therefore cannot run under a no-initialization/no-seed/no-database-writes restriction. Fixed historical dates are intentional test fixtures; live demo cohorts do not roll forward automatically. See [database verification notes](db/README.md#current-verified-test-baseline).
 
 ## Operations and scope
 
@@ -104,6 +108,6 @@ The check-in opens Friday–Sunday in Europe/Lisbon. Manager/HR reporting covers
 
 **FR5 / US6:** Managers can add dated events for their assigned team and see titles/week markers on the existing evolution chart. Events are context only, do not affect reporting values and are not exposed to HR/Employees. The seeded events are reused; no new demo records are required.
 
-External hosting is not configured by local setup. See [DEPLOYMENT.md](DEPLOYMENT.md) for HTTPS/proxy trust, database TLS/credentials, secrets, single-instance demo sessions versus persistent production sessions, and FEUP infrastructure questions. The stack remains Node.js + Express + PostgreSQL.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the current Render + Neon runbook, verified database TLS, secrets, HTTPS/proxy trust and the known single-instance academic/demo MemoryStore limitation. Restarts require signing in again; application data remains in PostgreSQL. FEUP is an alternative assignment infrastructure option, not the current production database.
 
 Requirements: [SPEC.md](SPEC.md). Development rules: [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md). Visual references: [docs/mockups/](docs/mockups/).

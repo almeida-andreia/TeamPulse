@@ -292,7 +292,7 @@ test("prototype access can be disabled and malformed/oversized requests fail saf
     await db.agent.get("/api/hr/responses").expect(404);
 });
 
-for (const today of ["2026-11-09", "2026-11-10", "2026-11-12"]) test(`check-in is closed before Friday (${today}), including direct POST`, async () => {
+for (const today of ["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"]) test(`check-in is closed before Friday (${today}), including direct POST`, async () => {
     const db = fixture({ ...week, today }); await db.login();
     const { body } = await db.agent.get("/api/employee/check-ins/current").expect(200);
     assert.equal(body.available, false); assert.equal(body.opensOn, "2026-11-13");
@@ -314,15 +314,29 @@ for (const [monday, friday, nextMonday] of [["2026-10-26", "2026-10-30", "2026-1
     await db.agent.post("/api/employee/check-ins").send(raw()).expect(201);
     assert.deepEqual(db.state.responses.slice(0, previous.length), previous);
 });
-test("Sunday remains open for its Monday cohort", async () => {
-    const db = fixture({ ...week, today: "2026-11-15" }); await db.login();
+for (const today of ["2026-11-14", "2026-11-15"]) test(`weekend remains open for its Monday cohort (${today})`, async () => {
+    const db = fixture({ ...week, today }); await db.login();
     assert.equal((await db.agent.get("/api/employee/check-ins/current")).body.available, true);
     await db.agent.post("/api/employee/check-ins").send(raw()).expect(201);
+});
+
+test("a Sunday submission does not delay the next cohort's Friday window", async () => {
+    const calendar = { ...week, today: "2026-11-15" };
+    const db = fixture(calendar); await db.login();
+    await db.agent.post("/api/employee/check-ins").send(raw()).expect(201);
+    const previous = structuredClone(db.state.responses);
+    Object.assign(calendar, { week_start: "2026-11-16", today: "2026-11-20", next_week: "2026-11-23" });
+    assert.equal((await db.agent.get("/api/employee/check-ins/current")).body.available, true);
+    await db.agent.post("/api/employee/check-ins").send(raw()).expect(201);
+    await db.agent.post("/api/employee/check-ins").send(raw()).expect(409);
+    assert.equal(db.state.responses.length, 2);
+    assert.deepEqual(db.state.responses.slice(0, 1), previous);
 });
 
 test("successive November Fridays each allow one independent check-in and preserve all prior answers", async () => {
     const calendar = { week_start: "2026-11-02", today: "2026-11-06", next_week: "2026-11-09" };
     const db = fixture(calendar); await db.login();
+    assert.equal((await db.agent.get("/api/employee/history")).body.monthlyCompletion.completed, 0);
     for (let index = 0; index < 4; index++) {
         const previous = structuredClone(db.state.responses);
         const status = (await db.agent.get("/api/employee/check-ins/current").expect(200)).body;
@@ -331,6 +345,7 @@ test("successive November Fridays each allow one independent check-in and preser
         await db.agent.post("/api/employee/check-ins").send(raw()).expect(201);
         await db.agent.post("/api/employee/check-ins").send(raw()).expect(409);
         assert.equal((await db.agent.get("/api/employee/check-ins/current")).body.submitted, true);
+        assert.equal((await db.agent.get("/api/employee/history")).body.monthlyCompletion.completed, index + 1);
         assert.deepEqual(db.state.responses.slice(0, previous.length), previous);
         const plus = (date, days) => { const d = new Date(`${date}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
         calendar.week_start = calendar.next_week;

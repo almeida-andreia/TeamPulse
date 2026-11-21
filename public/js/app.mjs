@@ -111,7 +111,7 @@ function bindCheckin() {
     form.addEventListener("change", () => saveDraft(form));
     document.querySelectorAll("[data-back]").forEach((button) => button.addEventListener("click", async () => { if (checkinSubmitting) return; saveDraft(form); state.step--; await render(); }));
     form.addEventListener("submit", async (event) => {
-        event.preventDefault(); if (checkinSubmitting) return; saveDraft(form);
+        event.preventDefault(); if (checkinSubmitting || form.querySelector('[type="submit"]').disabled) return; saveDraft(form);
         const error = document.querySelector("#checkin-error");
         try { validateCheckinStep(state.draft, state.step); error.hidden = true; }
         catch (problem) { error.textContent = problem.message; error.hidden = false; return; }
@@ -119,7 +119,15 @@ function bindCheckin() {
         checkinSubmitting = true;
         const button = form.querySelector('[type="submit"]'); button.disabled = true; button.textContent = "Saving your check-in…";
         try { await api.submitCheckin({ ...state.draft }); state.draft = { challenges: [], comment: "" }; state.step = 0; await render(); }
-        catch (error) { const target = document.querySelector("#checkin-error"); if (target) { target.textContent = error.message; target.hidden = false; } button.disabled = false; button.innerHTML = `Submit check-in${icon("arrow")}`; }
+        catch (error) {
+            // A different tab may have submitted, or the window may have closed.
+            // Re-read authoritative status through the normal view. Leave this
+            // stale button disabled, including if refreshing status fails.
+            if (error.status === 409) { await render(); return; }
+            const target = document.querySelector("#checkin-error");
+            if (target) { target.textContent = error.message; target.hidden = false; }
+            button.disabled = false; button.innerHTML = `Submit check-in${icon("arrow")}`;
+        }
         finally { checkinSubmitting = false; }
     });
 }

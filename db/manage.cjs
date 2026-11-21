@@ -4,6 +4,12 @@ const { readApplicationConfig } = require("../server/config");
 const fail = (message) => Object.assign(new Error(message), { code: "SETUP_PRECONDITION" });
 const schemas = ["identity", "wellbeing", "private", "operations"];
 
+function validateCommand(command, { check = false, shared = false }) {
+    if (!["init", "migrate", "seed-demo"].includes(command)
+        || check && command !== "migrate" || shared && command !== "init")
+        throw fail("Use init [--shared], migrate [--check], or seed-demo. --shared is only valid for init.");
+}
+
 function scriptBody(relative) {
     const sql = fs.readFileSync(path.join(__dirname, relative), "utf8");
     // Own the transaction in this runner. Do not split SQL at semicolons:
@@ -72,8 +78,8 @@ async function demoCatalogue(db, anchor) {
         title: "Agree next-cycle Platform capacity", description: "Fictional demo action: review shared commitments and agree sustainable next-cycle capacity.",
         owner: "team_manager", targetDate: date(25).slice(0, 10), status: "completed" });
 }
-async function run(pool, command, { check = false } = {}) {
-    if (!["init", "migrate", "seed-demo"].includes(command) || check && command !== "migrate") throw fail("Use init, migrate [--check], or seed-demo.");
+async function run(pool, command, { check = false, shared = false } = {}) {
+    validateCommand(command, { check, shared });
     if (command === "seed-demo" && readApplicationConfig().mode === "production") throw fail("Demo seeding is forbidden in production.");
     const client = await pool.connect(); let begun = false;
     try {
@@ -83,12 +89,21 @@ async function run(pool, command, { check = false } = {}) {
             return { status: "current", migrations: [] };
         }
         await client.query("BEGIN"); begun = true;
-        await client.query("SELECT pg_advisory_xact_lock(hashtext('teampulse-schema-setup'))");
+        // Shared schemas may be writable by other projects. Resolve built-ins
+        // only through trusted namespaces while initializing; restore on commit.
+        if (shared) await client.query("SET LOCAL search_path = pg_catalog, pg_temp");
+        await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('teampulse-schema-setup'))");
         if (command === "init") {
-            const { rows } = await client.query(`SELECT schema_name FROM information_schema.schemata WHERE schema_name=ANY($1::text[])`, [schemas]);
-            const { rows: tables } = await client.query(`SELECT table_name FROM information_schema.tables
-                WHERE table_schema NOT IN ('pg_catalog','information_schema') AND table_schema NOT LIKE 'pg_%'`);
-            if (rows.length || tables.length) throw fail("db:init requires an empty dedicated database. Existing schemas/data will not be reset or overwritten.");
+            // Catalog visibility does not depend on USAGE/ownership, unlike
+            // information_schema. Never reuse even an empty target namespace.
+            const { rows } = await client.query(`SELECT nspname FROM pg_catalog.pg_namespace
+                WHERE nspname=ANY($1::text[]) ORDER BY nspname`, [schemas]);
+            if (rows.length) throw fail(`TeamPulse target schemas already exist: ${rows.map((row) => row.nspname).join(", ")}. Initialization will not reuse or change them.`);
+            if (!shared) {
+                const { rows: tables } = await client.query(`SELECT table_name FROM information_schema.tables
+                    WHERE table_schema NOT IN ('pg_catalog','information_schema') AND table_schema NOT LIKE 'pg_%'`);
+                if (tables.length) throw fail("db:init requires an empty dedicated database. Existing schemas/data will not be reset or overwritten.");
+            }
             await client.query(scriptBody("schema.sql"));
         } else if (command === "migrate") {
             for (const filename of await migrations(client)) await client.query(scriptBody(`migrations/${filename}`));
@@ -111,7 +126,7 @@ async function run(pool, command, { check = false } = {}) {
             await client.query("SET CONSTRAINTS ALL IMMEDIATE");
         }
         await client.query("COMMIT"); begun = false;
-        return { status: "complete", command };
+        return { status: "complete", command, ...(shared ? { shared: true } : {}) };
     } catch (error) { if (begun) await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
 }
@@ -120,9 +135,11 @@ if (require.main === module) {
     (async () => {
         try {
             const [command, ...flags] = process.argv.slice(2);
-            if (flags.some((flag) => flag !== "--check")) throw fail("Unknown setup option.");
+            if (flags.some((flag) => !["--check", "--shared"].includes(flag))) throw fail("Unknown setup option.");
+            const options = { check: flags.includes("--check"), shared: flags.includes("--shared") };
+            validateCommand(command, options); // Reject invalid flags before loading a database pool.
             pool = require("../server/db").pool;
-            console.log(JSON.stringify(await run(pool, command, { check: flags.includes("--check") })));
+            console.log(JSON.stringify(await run(pool, command, options)));
         } catch (error) {
             console.error(["SETUP_PRECONDITION", "DATABASE_NOT_CONFIGURED", "DATABASE_CONFIGURATION_INVALID", "CONFIGURATION_INVALID"].includes(error.code)
                 ? error.message : "Database setup failed and was rolled back. Check DB_* configuration, PostgreSQL version, schema prerequisites and DDL permissions.");

@@ -32,6 +32,15 @@ export function createDemoEmployeeApi({ storage, now = () => new Date() } = {}) 
         try { storage?.setItem(STORE, JSON.stringify(state)); }
         catch { /* Keep the preview usable in memory when storage is disabled. */ }
     }
+    function checkinStatus() {
+        const date = now(), today = lisbonDateKey(date), weekStart = weekKey(date);
+        const nextWeek = addDays(weekStart, 7), opensOn = addDays(weekStart, 4);
+        const submitted = state.checkins.some((entry) => entry.weekStart === weekStart);
+        // Match the persisted flow's Lisbon cohort/window, never elapsed time
+        // since the previous response. This does not restrict a fifth week.
+        return { weekStart, nextWeek, opensOn, nextOpensOn: addDays(nextWeek, 4), submitted,
+            available: !submitted && today >= opensOn && today < nextWeek };
+    }
     function allHistory() {
         const wellbeing = [6.6, 6.8, 6.5, 7.1, 7.0, 7.4, 7.2, 7.6];
         const workload = [7.2, 6.8, 7.3, 6.6, 6.7, 6.1, 6.5, 5.8];
@@ -98,13 +107,11 @@ export function createDemoEmployeeApi({ storage, now = () => new Date() } = {}) 
     }
     return {
         async getEmployee() { return { firstName: "Ana", displayName: "Ana Silva", role: "employee" }; },
-        async getCheckinStatus() {
-            const weekStart = weekKey(now());
-            return { weekStart, nextWeek: addDays(weekStart, 7), submitted: state.checkins.some((entry) => entry.weekStart === weekStart) };
-        },
+        async getCheckinStatus() { return checkinStatus(); },
         async submitCheckin(answers) {
-            const weekStart = weekKey(now());
-            if (state.checkins.some((entry) => entry.weekStart === weekStart)) throw problem("You’ve already checked in this week. Thank you.", 409);
+            const status = checkinStatus(), weekStart = status.weekStart;
+            if (status.submitted) throw problem("You’ve already checked in this week. Thank you.", 409);
+            if (!status.available) throw problem("Your weekly check-in opens on Friday. Please come back then.", 409);
             const normalized = normalizeCheckin(answers);
             state.checkins.push({ weekStart, ...normalized });
             persist(); return { weekStart };
