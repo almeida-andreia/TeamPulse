@@ -5,6 +5,16 @@ export const ACTIVITY_AREAS = REPORT_METRICS;
 export const ACTIVITY_TYPES = Object.freeze(["workshop", "group_activity", "webinar", "other"]);
 export const activityTypeLabel = (type) => ({ workshop: "Workshop", group_activity: "Group activity", webinar: "Webinar", other: "Other" })[type] ?? type;
 export const ACTIVITY_STATUSES = Object.freeze(["draft", "upcoming", "in_progress", "completed"]);
+// Match the API's publication/start/duration lifecycle when rendering a DTO
+// that may have outlived its Upcoming state. This never changes stored data or
+// grants registration access; the API remains authoritative for every write.
+export function activityStatusAt(activity, now = Date.now()) {
+    if (activity.publication === "draft" || activity.publication == null && activity.status === "draft") return "draft";
+    const start = Date.parse(activity.startsAt), duration = Number(activity.duration);
+    if (!Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return activity.status;
+    if (now < start) return "upcoming";
+    return now < start + duration * 60000 ? "in_progress" : "completed";
+}
 const invalid = (message) => Object.assign(new Error(message), { status: 400 });
 export const validId = (value) => typeof value === "string" && /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
 export function validateActivity(input) {
@@ -58,8 +68,12 @@ export function createHrActivitiesApi(source) {
         update: (id, body) => request(`/${encodeURIComponent(id)}`, "PUT", validateActivity(body)) };
 }
 const options = (items, selected) => items.map((item) => `<option value="${e(item.key ?? item.id)}"${(item.key ?? item.id) === selected ? " selected" : ""}>${e(item.label ?? item.name)}</option>`).join("");
-export function renderHrActivities(data, filters = {}) {
-    const list = data.activities.filter((a) => (!filters.departmentId || a.departmentId === filters.departmentId)
+export function renderHrActivities(data, filters = {}, now = Date.now()) {
+    const activities = data.activities.map((activity) => {
+        const status = activityStatusAt(activity, now);
+        return { ...activity, status, registrationOpen: activity.registrationOpen && status === "upcoming" };
+    });
+    const list = activities.filter((a) => (!filters.departmentId || a.departmentId === filters.departmentId)
         && (!filters.month || monthKey(a.startsAt) === filters.month)
         && (!filters.area || a.area === filters.area) && (!filters.status || a.status === filters.status));
     return `<div class="hr-activities action-plans"><div class="page-heading"><div><p class="eyebrow">ORGANIZATION RESPONSE</p><h1 id="page-title" tabindex="-1">Insights &amp; Activities</h1><p class="subtitle">Turn safe aggregate insights into supportive wellbeing activities.</p></div><button class="button" type="button" data-hr-activity-create>${icon("sparkle")}Create wellbeing activity</button></div>

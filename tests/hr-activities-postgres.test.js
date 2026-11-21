@@ -205,6 +205,28 @@ test("PostgreSQL HR activity management and Employee support integration (all fi
                 for (const other of [hr, manager, request.agent(app)])
                     await other.post(`/api/employee/activities/${upcoming.id}/registrations`).send({}).expect(other === hr || other === manager ? 403 : 401);
             });
+            await t.test("HR lists scheduled dates newest first, including past sessions, with deterministic ties", async () => {
+                const fixtures = [];
+                for (let i = 0; i < 3; i++) fixtures.push((await hr.post("/api/hr/activities")
+                    .send(input({ sourceWeek: undefined, title: `HR schedule regression ${i}` })).expect(201)).body);
+                // Only newly created fixtures in this disposable database change.
+                await client.query(`UPDATE operations.activities SET starts_at='2026-10-19T14:00:00Z',
+                    published_at='2026-10-18T12:00:00Z' WHERE activity_id=$1`, [fixtures[0].id]);
+                await client.query("UPDATE operations.activities SET created_at='2026-10-19T12:00:00Z' WHERE activity_id=$1", [fixtures[1].id]);
+                const { activities } = (await hr.get("/api/hr/activities").expect(200)).body;
+                const past = activities.find((a) => a.id === fixtures[0].id);
+                assert.equal(past.status, "completed"); assert.equal(past.registrationOpen, false);
+                for (const fixture of fixtures.slice(1)) {
+                    const future = activities.find((a) => a.id === fixture.id);
+                    assert.equal(future.status, "upcoming"); assert.equal(future.registrationOpen, true);
+                }
+                assert.deepEqual(activities.map((a) => a.id), [...activities].sort((a, b) =>
+                    Date.parse(b.startsAt) - Date.parse(a.startsAt) || (BigInt(a.id) < BigInt(b.id) ? 1 : -1)).map((a) => a.id));
+                const { renderHrActivities } = await import("../public/js/hr-activities.mjs");
+                const html = renderHrActivities({ activities, departments: [], insights: [] });
+                assert(html.indexOf(`data-hr-activity-row="${fixtures[2].id}"`) < html.indexOf(`data-hr-activity-row="${fixtures[1].id}"`));
+                assert(html.indexOf(`data-hr-activity-row="${fixtures[1].id}"`) < html.indexOf(`data-hr-activity-row="${fixtures[0].id}"`));
+            });
             await t.test("existing activity and response fingerprints and Manager plans remain intact; source snapshot is protected by SQL", async () => {
                 for (const row of original) assert.deepEqual((await client.query("SELECT to_jsonb(a) AS data FROM operations.activities a WHERE activity_id=$1", [row.activity_id])).rows[0].data, row.data);
                 for (const row of originalRegistrations) assert.deepEqual((await client.query("SELECT to_jsonb(r) AS data FROM private.activity_registrations r WHERE activity_id=$1 AND user_id=$2", [row.activity_id, row.user_id])).rows[0].data, row.data);

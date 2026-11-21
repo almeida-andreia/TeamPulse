@@ -32,7 +32,7 @@ function createHrActivities(getPool, { minimumResponses = () => process.env.MIN_
     async function list(hrId) {
         const db = getPool();
         const { rows: departments } = await db.query(`/* hr-activities:departments */ SELECT department_id, name FROM identity.departments ORDER BY department_id`);
-        const { rows } = await db.query(`${select} ORDER BY a.starts_at, a.activity_id`);
+        const { rows } = await db.query(`${select} ORDER BY a.starts_at DESC, a.activity_id DESC`);
         return { source: "postgres", departments: departments.map((d) => ({ id: String(d.department_id), name: d.name })),
             insights: await insights(db, hrId), activities: rows.map(dto) };
     }

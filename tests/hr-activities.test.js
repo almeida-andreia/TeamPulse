@@ -59,6 +59,7 @@ test("HR activity presentation escapes content, distinguishes source/general, fi
     assert(html.includes("General activity · no measured source")); assert(html.includes("Create wellbeing activity"));
     assert(html.includes("1 registration &middot; Registration open"));
     data.activities[0].registrationCount = 0; data.activities[0].registrationOpen = false; data.activities[0].status = "completed";
+    data.activities[0].startsAt = "2026-10-19T14:00:00.000Z";
     const closed = renderHrActivities(data);
     assert(closed.includes("0 registrations &middot; Registration closed")); assert(closed.includes("Completed"));
     assert(!renderHrActivities(data, { departmentId: "3" }).includes('data-hr-activity-row="1"'));
@@ -68,6 +69,57 @@ test("HR activity presentation escapes content, distinguishes source/general, fi
     assert(!form.includes('name="owner"')); assert(!form.includes('name="targetDate"'));
     assert.throws(() => renderHrActivityForm(data, { ...data.insights[0], departmentId: "3" }));
     assert(!renderHrActivityForm(data).includes('name="sourceWeek"'));
+});
+test("HR reconciles a stale Upcoming response for 19 October on 21 November without changing the DTO", async () => {
+    const { renderHrActivities } = await import("../public/js/hr-activities.mjs");
+    const data = { insights: [], departments: [], activities: [{ ...input(), id: "1", status: "upcoming",
+        startsAt: "2026-10-19T14:00:00.000Z", createdAt: "2026-10-01T12:00:00.000Z",
+        targetAudience: "All employees", registrationOpen: true, registrationCount: 3, source: null }] };
+    const before = structuredClone(data), now = Date.parse("2026-11-21T12:00:00Z");
+    const html = renderHrActivities(data, {}, now);
+    assert(html.includes('class="action-status action-status--completed"'));
+    assert(!html.includes('class="action-status action-status--upcoming"'));
+    assert(html.includes("19 Oct 2026")); assert(html.includes("3 registrations &middot; Registration closed"));
+    assert(!renderHrActivities(data, { status: "upcoming" }, now).includes('data-hr-activity-row="1"'));
+    assert(renderHrActivities(data, { status: "completed" }, now).includes('data-hr-activity-row="1"'));
+    assert.deepEqual(data, before);
+});
+test("a future scheduled HR activity is Upcoming even if it was created in October", async () => {
+    const { renderHrActivities } = await import("../public/js/hr-activities.mjs");
+    const data = { insights: [], departments: [], activities: [{ ...input(), id: "1", status: "upcoming",
+        startsAt: "2026-11-28T14:00:00.000Z", createdAt: "2026-10-19T12:00:00.000Z",
+        targetAudience: "All employees", registrationOpen: true, registrationCount: 0, source: null }] };
+    const html = renderHrActivities(data, {}, Date.parse("2026-11-21T12:00:00Z"));
+    assert(html.includes('class="action-status action-status--upcoming"'));
+    assert(html.includes("Registration open")); assert(html.includes("Created 19 Oct 2026"));
+});
+for (const [instant, expected] of [
+    ["2026-11-21T13:59:59.999Z", "upcoming"],
+    ["2026-11-21T14:00:00.000Z", "in_progress"],
+    ["2026-11-21T14:44:59.999Z", "in_progress"],
+    ["2026-11-21T14:45:00.000Z", "completed"]
+]) test(`HR activity lifecycle preserves its start/end boundary at ${instant}`, async () => {
+    const { activityStatusAt } = await import("../public/js/hr-activities.mjs");
+    assert.equal(activityStatusAt({ ...input(), startsAt: "2026-11-21T14:00:00.000Z" }, Date.parse(instant)), expected);
+});
+test("past unpublished activities remain Draft", async () => {
+    const { activityStatusAt } = await import("../public/js/hr-activities.mjs");
+    assert.equal(activityStatusAt({ ...input(), publication: "draft", startsAt: "2026-10-19T14:00:00.000Z" },
+        Date.parse("2026-11-21T12:00:00Z")), "draft");
+});
+test("HR lifecycle compares instants across Lisbon's repeated autumn hour", async () => {
+    const { activityStatusAt } = await import("../public/js/hr-activities.mjs");
+    const { dateLabel, timeLabel } = await import("../public/js/ui.mjs");
+    const activity = { ...input(), startsAt: "2026-10-25T00:30:00.000Z", duration: 60 };
+    // Both ends display as 01:30 in Lisbon, but are an hour apart in time.
+    assert.equal(timeLabel(activity.startsAt), "01:30");
+    assert.equal(timeLabel("2026-10-25T01:30:00.000Z"), "01:30");
+    assert.equal(activityStatusAt(activity, Date.parse("2026-10-25T01:15:00Z")), "in_progress");
+    assert.equal(activityStatusAt(activity, Date.parse("2026-10-25T01:30:00Z")), "completed");
+    const midnight = { ...input(), startsAt: "2026-07-31T23:00:00.000Z" };
+    assert.equal(dateLabel(midnight.startsAt, { year: "numeric" }), "1 Aug 2026");
+    assert.equal(activityStatusAt(midnight, Date.parse("2026-07-31T22:59:59Z")), "upcoming");
+    assert.equal(activityStatusAt(midnight, Date.parse(midnight.startsAt)), "in_progress");
 });
 test("HR activity API requires PostgreSQL and never falls back to local demo success", async () => {
     const { createHrActivitiesApi } = await import("../public/js/hr-activities.mjs");
