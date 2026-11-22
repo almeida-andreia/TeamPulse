@@ -83,7 +83,7 @@ Open `http://127.0.0.1:3000` (or the configured `HOST`/`PORT`). Startup validate
 npm test
 ```
 
-This runs `node --test --test-concurrency=1`. Without `TEAMPULSE_TEST_POSTGRES=1`, PostgreSQL integrations report skips. The **current verified complete baseline is 243 total / 243 passed / 0 failed / 0 skipped**, verified on 20 November 2026, including FR5, shared initialization and the check-in consistency regressions.
+This runs `node --test --test-concurrency=1`. Without `TEAMPULSE_TEST_POSTGRES=1`, PostgreSQL integrations report skips. The **current verified complete baseline is 252 total / 252 passed / 0 failed / 0 skipped**, verified on 21 November 2026, including FR5, shared initialization, check-in consistency and the HR activity lifecycle, ordering and Lisbon timezone regressions.
 
 The full suite requires a **separately initialized and seeded disposable local baseline**. First configure `DB_HOST` to loopback and `DB_NAME` to that disposable database, with its test credentials in the test shell. Never point the suite at Neon, FEUP, the existing local demo or real employee data. The test identity needs DDL and `CREATEDB` privileges; the deployed runtime identity does not. Then:
 

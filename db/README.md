@@ -63,7 +63,7 @@ Preserve the historical local data. These known differences are not instructions
 
 ### Current verified test baseline
 
-The current verified complete result is **243 total / 243 passed / 0 failed / 0 skipped**, verified on 20 November 2026. It includes FR5, shared initialization and the Employee check-in consistency regressions. Complete integration runs require a disposable local baseline and can perform DDL, seed fixtures and rollback writes; they are not read-only database audits. The older results below are historical observations, not current failures or the current test count.
+The current verified complete result is **252 total / 252 passed / 0 failed / 0 skipped**, verified on 21 November 2026. It includes FR5, shared initialization, Employee check-in consistency and the HR activity lifecycle, ordering and Lisbon timezone regressions. Complete integration runs require a disposable local baseline and can perform DDL, seed fixtures and rollback writes; they are not read-only database audits. The older results below are historical observations, not current failures or the current test count.
 
 ### Documentation verification on 16 November 2026
 
@@ -73,7 +73,7 @@ The failures are in `demo-expansion.test.js`, `hr-activities-postgres.test.js`, 
 
 This was a dated local dataset/maintenance and test-fixture assumption issue, not a documentation-induced code change. At that review, no test, reporting policy or cohort was changed to make the result green. Integration isolation was addressed by the subsequent stabilization below; operational cohort maintenance remains separate. Finalizing alone would not create missing submissions or restore eight fully measured demo weeks. Before/after row fingerprints for all 16 local tables and stored function definitions were unchanged; all 359 wellbeing responses were preserved. Rollback integration tests can still advance generated identity sequences.
 
-**Subsequent FR5/test stabilization (historical 216-test milestone):** The reporting-dependent integrations now create/seed/drop separate `teampulse_test_*` databases with a fixed Friday 13 November 2026 clock, including test-only SQL defaults/trigger bodies. That milestone reported **216/216 passed, zero failures/skips**; the current 243-test result is recorded above. Existing assertions were retained; the eleven HR subtests are reached again, and nine FR5 tests/subtests were added. The finalization test still expects exactly its one elapsed fixture and verifies all original cohorts unchanged; this is now true of its isolated baseline. The configured demo is not finalized, reset or reseeded. Test setup requires `CREATEDB` for the test/maintenance account, never the deployed runtime identity. See [architecture](../docs/ARCHITECTURE.md#deterministic-postgresql-regression-fixtures).
+**Subsequent FR5/test stabilization (historical 216-test milestone):** The reporting-dependent integrations now create/seed/drop separate `teampulse_test_*` databases with a fixed Friday 13 November 2026 clock, including test-only SQL defaults/trigger bodies. That milestone reported **216/216 passed, zero failures/skips**; the current 252-test result is recorded above. Existing assertions were retained; the eleven HR subtests are reached again, and nine FR5 tests/subtests were added. The finalization test still expects exactly its one elapsed fixture and verifies all original cohorts unchanged; this is now true of its isolated baseline. The configured demo is not finalized, reset or reseeded. Test setup requires `CREATEDB` for the test/maintenance account, never the deployed runtime identity. See [architecture](../docs/ARCHITECTURE.md#deterministic-postgresql-regression-fixtures).
 
 ## Setup and existing local additive maintenance
 
@@ -207,4 +207,4 @@ and FR5 tests use a fixed-clock fresh fixture; historical missing-score and
 small-cohort privacy cases remain covered by separate assertions and unit fixtures.
 Unset `TEAMPULSE_TEST_POSTGRES` or set it to `0` for non-database verification;
 PostgreSQL integrations then report skips. A no-DDL/no-seed/no-database-writes
-task cannot reproduce the complete 243-test run safely.
+task cannot reproduce the complete 252-test run safely.

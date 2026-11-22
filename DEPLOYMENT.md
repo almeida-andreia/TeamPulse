@@ -76,8 +76,8 @@ Without that variable the PostgreSQL tests explicitly report skips; unit/API
 fixtures still run. Do not run this integration suite against real employee data.
 Its transaction fixtures roll back, but generated identity sequences may advance
 in the configured baseline, which is why that baseline must also be disposable.
-The current verified complete baseline is **243 total / 243 passed / 0 failed /
-0 skipped**, verified on 20 November 2026. Set `TEAMPULSE_TEST_POSTGRES=0` for
+The current verified complete baseline is **252 total / 252 passed / 0 failed /
+0 skipped**, verified on 21 November 2026. Set `TEAMPULSE_TEST_POSTGRES=0` for
 non-database verification. A no-DDL/no-seed/no-database-writes task cannot safely
 reproduce the complete run; do not change tests to hide that limitation.
 
@@ -337,7 +337,7 @@ was simulated locally; that historical pass did not connect to FEUP or deploy
 externally. The application has since been deployed successfully to Render with
 Neon, and local application testing against Neon succeeded. Those deployment
 facts are the approved project state, not new checks executed by this document
-cleanup. The current verified complete test baseline is 243/243, recorded above.
+cleanup. The current verified complete test baseline is 252/252, recorded above.
 
 ## External academic MVP demo access
 
